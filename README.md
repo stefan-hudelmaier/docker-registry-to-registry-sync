@@ -49,14 +49,14 @@ including them in the `config.yml` file.
 ### Execution via docker:
 
 ```
-docker --rm -it \
+docker run --rm -it \
     -v $(pwd)/config.yml:/config.yml \
     stefanhudelmaier/docker-registry-to-registry-sync
 ```
 
 When using environment variables for the passwords:
 ```
-docker --rm -it \
+docker run --rm -it \
     -e SOURCE_REGISTRY_PASSWORD=secret \
     -e DESTINATION_REGISTRY_PASSWORD=secret \
     -v $(pwd)/config.yml:/config.yml \
