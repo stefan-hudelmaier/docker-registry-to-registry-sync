@@ -27,7 +27,6 @@ destination_registry:
 repositories:
   - company/super-project
   - company/cool-project
-
 ```
 
 The meaning of the settings:
@@ -56,6 +55,7 @@ docker run --rm -it \
 ```
 
 When using environment variables for the passwords:
+
 ```
 docker run --rm -it \
     -e SOURCE_REGISTRY_PASSWORD=secret \
