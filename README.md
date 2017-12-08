@@ -38,7 +38,7 @@ The meaning of the settings:
   
 When the images are synced, the registry part of the tag is replaced, e.g.
 in the example above the tag `docker.example.com/company/super-project` is
-re-tagged as `127.0.0.1:5000/company/super-project`.
+re-tagged as `127.0.0.1:5000/company/super-project` and pushed to `127.0.0.1:5000`.
 
 ### Passwords as environment variables
 
@@ -48,6 +48,18 @@ including them in the `config.yml` file.
 
 ### Execution via docker:
 
+```
+docker --rm -it \
+    -v $(pwd)/config.yml:/config.yml \
+    stefanhudelmaier/docker-registry-to-registry-sync
+```
 
-
+When using environment variables for the passwords:
+```
+docker --rm -it \
+    -e SOURCE_REGISTRY_PASSWORD=secret \
+    -e DESTINATION_REGISTRY_PASSWORD=secret \
+    -v $(pwd)/config.yml:/config.yml \
+    stefanhudelmaier/docker-registry-to-registry-sync
+```
 
