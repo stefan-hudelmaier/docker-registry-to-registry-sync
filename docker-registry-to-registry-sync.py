@@ -1,10 +1,10 @@
 import yaml
 import docker
 from docker_registry_client._BaseClient import BaseClientV2 as RegistryClient
+from requests import HTTPError
 
 
 def get_all_images(registry_url, client, names):
-
     images = []
     for name in names:
         print(">>>" + registry_url + '/' + name)
@@ -13,17 +13,25 @@ def get_all_images(registry_url, client, names):
     return images
 
 
-def get_tags(images):
+def get_tags(client, image_names):
+    result = set()
+    for image_name in image_names:
+        try:
+            tags = client.get_repository_tags(name=image_name)['tags']
+        except HTTPError as e:
+            if e.response.status_code == 404:
+                print("image %s not found" % image_name)
+                tags = []
+            else:
+                raise e
 
-    tags = []
-    for image in images:
-        tags.append(image.tags)
+        for tag in tags:
+            result.add(image_name + ':' + tag)
 
-    return tags
+    return result
 
 
 def get_tags_without_registry(registry_url, images):
-
     result = set()
 
     for tags in [image.tags for image in images]:
@@ -45,42 +53,29 @@ def get_tags_without_registry(registry_url, images):
 
 if __name__ == '__main__':
 
-    import sys
-    sys.exit(0)
-
     with open('config.yml') as f:
         config = yaml.load(f)
 
-    src_client = docker.from_env()
-    dst_client = docker.from_env()
     src_registry_url = config['source_registry']['url']
     dst_registry_url = config['target_registry']['url']
+    src_client = RegistryClient(src_registry_url, username=str(config['source_registry']['username']),
+                                password=str(config['source_registry']['password']))
 
-    src_client.login(registry=src_registry_url, username=str(config['source_registry']['username']),
-                     password=str(config['source_registry']['password']))
-
-    dst_client.login(registry=dst_registry_url, username=str(config['target_registry']['username']),
-                     password=str(config['target_registry']['password']))
+    dst_client = RegistryClient(dst_registry_url, username=str(config['source_registry']['username']),
+                                password=str(config['source_registry']['password']))
 
     images_names = [image['name'] for image in config['images']]
-    src_images = get_all_images(src_registry_url, src_client, images_names)
-    dst_images = get_all_images(dst_registry_url, dst_client, images_names)
+    src_tags = get_tags(src_client, images_names)
+    dst_tags = get_tags(dst_client, images_names)
 
-    for dst_image in dst_images:
-        for dst_tag in dst_image.tags:
-            if dst_tag.startswith(src_registry_url + '/'):
-                print("Removing destination tag %s from local host" % dst_tag)
-                dst_client.images.remove(dst_tag, noprune=True)
-
-    dst_images = get_all_images(dst_registry_url, dst_client, images_names)
-    print(src_images)
-    print(dst_images)
-
-    src_tags = get_tags_without_registry(src_registry_url, src_images)
-    dst_tags = get_tags_without_registry(dst_registry_url, dst_images)
+    print(src_tags)
+    print(dst_tags)
 
     missing_tags = src_tags - dst_tags
     print(missing_tags)
+
+    import sys
+    sys.exit(0)
 
     for missing_tag in missing_tags:
         src_tag = src_registry_url + '/' + missing_tag
