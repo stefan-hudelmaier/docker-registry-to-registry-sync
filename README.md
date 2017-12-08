@@ -46,7 +46,7 @@ You can specify the registry passwords using the `SOURCE_REGISTRY_PASSWORD`
 and `DESTINATION_REGISTRY_PASSWORD` environment variables instead of 
 including them in the `config.yml` file.
 
-### Execution via docker:
+### Running via Docker:
 
 ```
 docker run --rm -it \
@@ -63,6 +63,9 @@ docker run --rm -it \
     -v $(pwd)/config.yml:/config.yml \
     stefanhudelmaier/docker-registry-to-registry-sync
 ```
+
+See [Image on Docker Hub](https://hub.docker.com/r/stefanhudelmaier/docker-registry-to-registry-sync/)
+
 ## Known limitations
 
 * Does not work with Docker Hub due to a problem in the used registry client, see https://github.com/yodle/docker-registry-client/issues/42
