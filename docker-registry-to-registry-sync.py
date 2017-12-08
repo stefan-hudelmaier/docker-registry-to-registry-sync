@@ -1,90 +1,105 @@
+from urllib.parse import urlparse
+
+import os
 import yaml
 import docker
-from docker_registry_client._BaseClient import BaseClientV2 as RegistryClient
+from docker_registry_client import DockerRegistryClient
 from requests import HTTPError
 
 
-def get_all_images(registry_url, client, names):
-    images = []
-    for name in names:
-        print(">>>" + registry_url + '/' + name)
-        images += client.images.list(name=registry_url + '/' + name)
-
-    return images
-
-
-def get_tags(client, image_names):
+def get_tags(client, repositories):
     result = set()
-    for image_name in image_names:
+    for repository in repositories:
         try:
-            tags = client.get_repository_tags(name=image_name)['tags']
+            tags = client.repository(repository).tags()
         except HTTPError as e:
             if e.response.status_code == 404:
-                print("image %s not found" % image_name)
+                print("repository %s not found" % repository)
                 tags = []
             else:
                 raise e
 
         for tag in tags:
-            result.add(image_name + ':' + tag)
+            result.add(repository + ':' + tag)
 
     return result
 
 
-def get_tags_without_registry(registry_url, images):
-    result = set()
+def strip_scheme(url):
+    parsed_url = urlparse(url)
+    scheme = "%s://" % parsed_url.scheme
+    return parsed_url.geturl().replace(scheme, '', 1)
 
-    for tags in [image.tags for image in images]:
-        for tag in tags:
-            tag_parts = tag.split('/')
 
-            if len(tag_parts) != 3:
-                print("Tag %s does not consist of 3 parts, skipping" % tag)
-                continue
+def load_config():
+    with open('config.yml') as f:
+        return yaml.load(f)
 
-            if tag_parts[0] != registry_url:
-                print("Tag %s does not belong to registry %s, skipping" % (tag, registry_url,))
-                continue
 
-            result.add('/'.join(tag_parts[1:]))
+def determine_password(config, kind):
+    if kind == 'src':
+        config_file_key = 'source_registry'
+        env_var = 'SOURCE_REGISTRY_PASSWORD'
+    elif kind == 'dst':
+        config_file_key = 'destination_registry'
+        env_var = 'DESTINATION_REGISTRY_PASSWORD'
+    else:
+        raise Exception("Invalid registry kind:", kind)
 
-    return result
+    config_file_password = config[config_file_key].get('password')
+    if config_file_password is not None:
+        return str(config_file_password)
+
+    env_value = os.environ.get(env_var)
+
+    if env_value is not None:
+        print("Using password from environment variable", env_var)
+        return env_value
+
+    return None
 
 
 if __name__ == '__main__':
 
-    with open('config.yml') as f:
-        config = yaml.load(f)
+    config = load_config()
 
     src_registry_url = config['source_registry']['url']
-    dst_registry_url = config['target_registry']['url']
-    src_client = RegistryClient(src_registry_url, username=str(config['source_registry']['username']),
-                                password=str(config['source_registry']['password']))
+    dst_registry_url = config['destination_registry']['url']
+    src_username = str(config['source_registry']['username'])
+    src_password = determine_password(config, 'src')
+    dst_username = str(config['destination_registry']['username'])
+    dst_password = determine_password(config, 'dst')
 
-    dst_client = RegistryClient(dst_registry_url, username=str(config['source_registry']['username']),
-                                password=str(config['source_registry']['password']))
+    src_client = DockerRegistryClient(src_registry_url, username=src_username,
+                                      password=src_password)
 
-    images_names = [image['name'] for image in config['images']]
-    src_tags = get_tags(src_client, images_names)
-    dst_tags = get_tags(dst_client, images_names)
+    dst_client = DockerRegistryClient(dst_registry_url, username=dst_username,
+                                      password=dst_password)
 
-    print(src_tags)
-    print(dst_tags)
+    docker_client = docker.from_env()
+    docker_client.login(registry=src_registry_url, username=src_username,
+                        password=src_password)
+
+    docker_client.login(registry=dst_registry_url, username=dst_username,
+                        password=dst_password)
+
+    repositories = config['repositories']
+    src_tags = get_tags(src_client, repositories)
+    dst_tags = get_tags(dst_client, repositories)
 
     missing_tags = src_tags - dst_tags
-    print(missing_tags)
-
-    import sys
-    sys.exit(0)
 
     for missing_tag in missing_tags:
-        src_tag = src_registry_url + '/' + missing_tag
-        dst_tag = dst_registry_url + '/' + missing_tag
+        src_tag = strip_scheme(src_registry_url) + '/' + missing_tag
+        dst_tag = strip_scheme(dst_registry_url) + '/' + missing_tag
+
+        print("Pulling:", src_tag)
+        docker_client.images.pull(src_tag)
 
         print("Changing %s to %s" % (src_tag, dst_tag,))
 
-        src_image = src_client.images.get(name=src_tag)
+        src_image = docker_client.images.get(name=src_tag)
         src_image.tag(dst_tag)
 
-        print(dst_tag)
-        dst_client.images.push(dst_tag)
+        print("Pushing:", dst_tag)
+        docker_client.images.push(dst_tag)
