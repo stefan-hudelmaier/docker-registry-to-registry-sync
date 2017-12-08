@@ -1,3 +1,4 @@
+requests
 docker
 docker-registry-client
 pyyaml

@@ -1,12 +1,13 @@
 # docker-registry-to-registry-sync
-Project for syncing images from one registry to another
+
+Tool for syncing docker images from one registry to another
 
 ## Goal
 
 Make is possible to sync all tags of a number of docker repositories
 from one registry to another. Can be useful if you have an interal docker
-registry but want to sync a subset of the docker images to a public registry
-(e.g. Docker Hub).
+registry but want to sync a subset of the docker images to a globally 
+accessibly registry.
 
 ## Usage
 
@@ -62,4 +63,6 @@ docker run --rm -it \
     -v $(pwd)/config.yml:/config.yml \
     stefanhudelmaier/docker-registry-to-registry-sync
 ```
+## Known limitations
 
+* Does not work with Docker Hub due to a problem in the used registry client, see https://github.com/yodle/docker-registry-client/issues/42
